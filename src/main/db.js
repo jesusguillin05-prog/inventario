@@ -1,6 +1,6 @@
 import { app } from 'electron'
 import { join } from 'path'
-import { schema } from './schema'
+import { schema } from './schema.js'
 
 // getBuiltinModule evita que el empaquetador intente resolver 'node:sqlite'
 const { DatabaseSync } = process.getBuiltinModule('node:sqlite')

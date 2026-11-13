@@ -1,3 +1,4 @@
+import PropTypes from 'prop-types'
 import Panel from '../components/Panel'
 import { formatMoney, normalizeInputValue } from '../utils/format'
 
@@ -26,7 +27,6 @@ export default function ProductosPage({
   setProductForm,
   emptyProductForm,
   handleProductSubmit,
-  selectedCategoryId,
   formatMoneyInput,
   parseMoneyInput
 }) {
@@ -68,7 +68,7 @@ export default function ProductosPage({
               <input
                 value={normalizeInputValue(productSearch)}
                 onChange={(event) => setProductSearch(event.target.value)}
-                placeholder="Nombre, SKU o categoría"
+                placeholder="Nombre o categoría"
               />
             </label>
             <label className="toolbar-sort">
@@ -142,15 +142,8 @@ export default function ProductosPage({
                               <span className="badge">Inactivo</span>
                             ) : null}
                           </div>
-                          {producto.sku ? <small className="muted">{producto.sku}</small> : null}
                         </td>
-                        <td>
-                          {producto.stock}
-                          {Number(producto.stock_minimo) > 0 &&
-                          Number(producto.stock) <= Number(producto.stock_minimo) ? (
-                            <span className="badge warn">Bajo</span>
-                          ) : null}
-                        </td>
+                        <td>{producto.stock}</td>
                         <td>{formatMoney(producto.costo)}</td>
                         <td>{formatMoney(producto.precio)}</td>
                         <td>
@@ -217,28 +210,16 @@ export default function ProductosPage({
 
             <form className="stack-form side-form" onSubmit={handleProductSubmit}>
               <h3>{productForm.id ? 'Editar producto' : 'Agregar producto'}</h3>
-              <div className="field-row two-col">
-                <label>
-                  SKU
-                  <input
-                    value={normalizeInputValue(productForm.sku)}
-                    onChange={(event) =>
-                      setProductForm((current) => ({ ...current, sku: event.target.value }))
-                    }
-                    placeholder="SKU"
-                  />
-                </label>
-                <label>
-                  Nombre
-                  <input
-                    value={normalizeInputValue(productForm.nombre)}
-                    onChange={(event) =>
-                      setProductForm((current) => ({ ...current, nombre: event.target.value }))
-                    }
-                    placeholder="Nombre"
-                  />
-                </label>
-              </div>
+              <label>
+                Nombre
+                <input
+                  value={normalizeInputValue(productForm.nombre)}
+                  onChange={(event) =>
+                    setProductForm((current) => ({ ...current, nombre: event.target.value }))
+                  }
+                  placeholder="Nombre"
+                />
+              </label>
 
               <div className="field-row two-col">
                 <label>
@@ -334,4 +315,63 @@ export default function ProductosPage({
       )}
     </Panel>
   )
+}
+
+ProductosPage.propTypes = {
+  categorias: PropTypes.arrayOf(
+    PropTypes.shape({
+      id: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+      nombre: PropTypes.string
+    })
+  ).isRequired,
+  selectedCategoryForProducts: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+  setSelectedCategoryId: PropTypes.func.isRequired,
+  categoryName: PropTypes.string,
+  setCategoryName: PropTypes.func.isRequired,
+  handleCreateCategory: PropTypes.func.isRequired,
+  productSearch: PropTypes.string,
+  setProductSearch: PropTypes.func.isRequired,
+  productSortBy: PropTypes.string,
+  setProductSortBy: PropTypes.func.isRequired,
+  showInactiveProducts: PropTypes.bool,
+  setShowInactiveProducts: PropTypes.func.isRequired,
+  categoriaActual: PropTypes.shape({
+    id: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+    nombre: PropTypes.string
+  }),
+  productosPorCategoria: PropTypes.arrayOf(
+    PropTypes.shape({
+      id: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+      nombre: PropTypes.string,
+      stock: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+      costo: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+      precio: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+      activo: PropTypes.oneOfType([PropTypes.number, PropTypes.string])
+    })
+  ).isRequired,
+  pendingDelete: PropTypes.oneOfType([PropTypes.number, PropTypes.string, PropTypes.bool]),
+  setPendingDelete: PropTypes.func.isRequired,
+  handleDeleteCategory: PropTypes.func.isRequired,
+  handleEditProduct: PropTypes.func.isRequired,
+  handleToggleProduct: PropTypes.func.isRequired,
+  handleDeleteProduct: PropTypes.func.isRequired,
+  productForm: PropTypes.shape({
+    id: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+    nombre: PropTypes.string,
+    costo: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+    precio: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+    stock_minimo: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+    stock_inicial: PropTypes.oneOfType([PropTypes.number, PropTypes.string])
+  }).isRequired,
+  setProductForm: PropTypes.func.isRequired,
+  emptyProductForm: PropTypes.shape({
+    nombre: PropTypes.string,
+    costo: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+    precio: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+    stock_minimo: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+    stock_inicial: PropTypes.oneOfType([PropTypes.number, PropTypes.string])
+  }).isRequired,
+  handleProductSubmit: PropTypes.func.isRequired,
+  formatMoneyInput: PropTypes.func.isRequired,
+  parseMoneyInput: PropTypes.func.isRequired
 }

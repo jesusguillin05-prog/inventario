@@ -98,9 +98,9 @@ export function updateProduct(db, payload = {}) {
     ).run(sku, nombre, categoriaId, costo, precio, stockMinimo, productId)
   } catch (error) {
     if (String(error?.message || '').includes('UNIQUE constraint failed: productos.sku')) {
-      throw new Error('Ya existe un producto con ese SKU')
+      throw new Error('Ya existe un producto con ese SKU', { cause: error })
     }
-    throw error
+    throw new Error('No se pudo actualizar el producto', { cause: error })
   }
 
   return db

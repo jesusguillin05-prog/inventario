@@ -1,3 +1,4 @@
+import PropTypes from 'prop-types'
 import Panel from '../components/Panel'
 import { formatMoney, formatNumber } from '../utils/format'
 
@@ -59,4 +60,21 @@ export default function ReportesPage({ report }) {
       </Panel>
     </section>
   )
+}
+
+ReportesPage.propTypes = {
+  report: PropTypes.shape({
+    ingresos: PropTypes.number,
+    costoVendido: PropTypes.number,
+    utilidadBruta: PropTypes.number,
+    utilidadNeta: PropTypes.number,
+    comprasDelMes: PropTypes.number,
+    gastosOperativos: PropTypes.number,
+    masVendidos: PropTypes.arrayOf(
+      PropTypes.shape({
+        nombre: PropTypes.string,
+        unidades: PropTypes.number
+      })
+    )
+  }).isRequired
 }

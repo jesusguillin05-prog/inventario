@@ -1,4 +1,5 @@
-﻿import PageHeader from './components/PageHeader'
+﻿import { useState } from 'react'
+import PageHeader from './components/PageHeader'
 import Toast from './components/Toast'
 import { useInventoryData, emptyProductForm } from './hooks/useInventoryData'
 import ComprasPage from './pages/ComprasPage'
@@ -45,7 +46,6 @@ function App() {
     status,
     categoryName,
     setCategoryName,
-    selectedCategoryId,
     setSelectedCategoryId,
     productSearch,
     setProductSearch,
@@ -63,10 +63,14 @@ function App() {
     setPurchaseForm,
     expenseForm,
     setExpenseForm,
+    gastos,
     adjustmentForm,
     setAdjustmentForm,
+    recentAdjustments,
     pendingDelete,
     setPendingDelete,
+    confirmation,
+    setConfirmation,
     saleCart,
     purchaseCart,
     branding,
@@ -89,6 +93,7 @@ function App() {
     addToSaleCart,
     removeFromSaleCart,
     handleSaleSubmit,
+    handleDeleteSale,
     addToPurchaseCart,
     removeFromPurchaseCart,
     handlePurchaseSubmit,
@@ -98,11 +103,17 @@ function App() {
     parseMoneyInput
   } = useInventoryData()
 
+  const stockAlerts = productosStockBajo.map((producto) => ({
+    ...producto,
+    estado: Number(producto.stock ?? 0) === 0 ? 'agotado' : 'bajo'
+  }))
+
   const page = PAGE_TITLES[tab] || PAGE_TITLES.dashboard
   const pageSubtitle =
     tab === 'dashboard' || tab === 'reportes'
       ? `${page.subtitle} · ${monthLabel(reportMonth)}`
       : page.subtitle
+  const [notificationsOpen, setNotificationsOpen] = useState(false)
 
   return (
     <div className="app-shell">
@@ -134,6 +145,41 @@ function App() {
 
       <main className="main-panel">
         <div className="content-inner">
+          <div className="topbar-actions">
+            <div className="notification-wrapper">
+              <button
+                type="button"
+                className="notification-toggle"
+                aria-label="Notificaciones de stock"
+                onClick={() => setNotificationsOpen((open) => !open)}
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V11a6 6 0 1 0-12 0v3.2a2 2 0 0 1-.6 1.4L4 17h5m6 0a3 3 0 1 1-6 0m6 0H9" />
+                </svg>
+                {stockAlerts.length > 0 && <span className="notification-dot" />}
+              </button>
+
+              {notificationsOpen && stockAlerts.length > 0 && (
+                <div className="notification-panel" aria-live="polite">
+                  {stockAlerts.map((producto) => (
+                    <div
+                      key={producto.id}
+                      className={`notification-item ${
+                        producto.estado === 'agotado' ? 'is-alert' : ''
+                      }`}
+                    >
+                      <div>
+                        <strong>{producto.nombre}</strong>
+                        <small>{producto.stock} unidades</small>
+                      </div>
+                      <span>{producto.estado === 'agotado' ? 'Agotado' : 'Stock bajo'}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
           <PageHeader title={page.title} subtitle={pageSubtitle}>
             {tab === 'reportes' && (
               <div className="header-actions">
@@ -198,7 +244,6 @@ function App() {
               setProductForm={setProductForm}
               emptyProductForm={emptyProductForm}
               handleProductSubmit={handleProductSubmit}
-              selectedCategoryId={selectedCategoryId}
               formatMoneyInput={formatMoneyInput}
               parseMoneyInput={parseMoneyInput}
             />
@@ -212,6 +257,7 @@ function App() {
               setSaleForm={setSaleForm}
               addToSaleCart={addToSaleCart}
               handleSaleSubmit={handleSaleSubmit}
+              handleDeleteSale={handleDeleteSale}
               saleCart={saleCart}
               removeFromSaleCart={removeFromSaleCart}
               saleCartTotal={saleCartTotal}
@@ -236,6 +282,7 @@ function App() {
               adjustmentForm={adjustmentForm}
               setAdjustmentForm={setAdjustmentForm}
               handleAdjustmentSubmit={handleAdjustmentSubmit}
+              recentAdjustments={recentAdjustments}
             />
           )}
 
@@ -244,6 +291,7 @@ function App() {
               expenseForm={expenseForm}
               setExpenseForm={setExpenseForm}
               handleExpenseSubmit={handleExpenseSubmit}
+              gastos={gastos}
             />
           )}
 
@@ -259,6 +307,34 @@ function App() {
           )}
         </div>
       </main>
+
+      {confirmation ? (
+        <div className="modal-overlay" onClick={() => setConfirmation(null)}>
+          <div className="modal-card" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-header">
+              <h3>{confirmation.title || 'Confirmación'}</h3>
+              <button type="button" className="modal-close" onClick={() => setConfirmation(null)}>
+                ×
+              </button>
+            </div>
+            <p className="modal-message">{confirmation.message}</p>
+            <div className="modal-actions">
+              <button type="button" className="secondary-btn" onClick={() => setConfirmation(null)}>
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="primary-btn"
+                onClick={() => {
+                  if (confirmation.onConfirm) confirmation.onConfirm()
+                }}
+              >
+                Aceptar
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {status ? <Toast message={status} isError={looksLikeError(status)} /> : null}
     </div>

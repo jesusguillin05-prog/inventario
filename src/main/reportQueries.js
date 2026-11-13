@@ -8,9 +8,9 @@ export function getMonthlyReport(db, mes, categoriaId = null) {
   const inventarioParams = hasCategory ? [Number(categoriaId)] : []
 
   const ingresos = db.prepare(`
-    SELECT COALESCE(SUM(v.total), 0) AS v
-    FROM ventas v
-    JOIN venta_items vi ON vi.venta_id = v.id
+    SELECT COALESCE(SUM(vi.cantidad * vi.precio_unitario), 0) AS v
+    FROM venta_items vi
+    JOIN ventas v ON v.id = vi.venta_id
     JOIN productos p ON p.id = vi.producto_id
     WHERE substr(v.fecha, 1, 7) = ?
       ${hasCategory ? 'AND p.categoria_id = ?' : ''}

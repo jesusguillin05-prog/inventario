@@ -2,8 +2,8 @@ import { app, shell, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
-import { initDb } from './db'
-import { registerIpc } from './ipc'
+import { initDb } from './db.js'
+import { registerIpc } from './ipc.js'
 
 // Evita abrir dos copias de la app al mismo tiempo (dos procesos sobre la misma BD => "database is locked")
 if (!app.requestSingleInstanceLock()) {

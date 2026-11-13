@@ -1,3 +1,5 @@
+import PropTypes from 'prop-types'
+
 export default function PageHeader({ title, subtitle, children }) {
   return (
     <header className="page-header">
@@ -8,4 +10,10 @@ export default function PageHeader({ title, subtitle, children }) {
       {children}
     </header>
   )
+}
+
+PageHeader.propTypes = {
+  title: PropTypes.string.isRequired,
+  subtitle: PropTypes.string.isRequired,
+  children: PropTypes.node
 }

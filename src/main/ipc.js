@@ -1,7 +1,9 @@
 import { ipcMain } from 'electron'
-import { getDb, transaction } from './db'
-import { getProductList, normalizeSku, toggleProduct, updateProduct } from './inventoryQueries'
-import { getMonthlyReport } from './reportQueries'
+import { getDb, transaction } from './db.js'
+import { getProductList, normalizeSku, toggleProduct, updateProduct } from './inventoryQueries.js'
+import { getMonthlyReport } from './reportQueries.js'
+import { reconcilePurchaseTotal } from './purchaseUtils.js'
+import { reconcileSaleTotal } from './saleUtils.js'
 
 // Fecha LOCAL (toISOString usa UTC y en Colombia, después de las 7 pm, daría el día siguiente)
 const hoy = () => {
@@ -92,9 +94,9 @@ export function registerIpc() {
       return info.lastInsertRowid
     } catch (error) {
       if (String(error?.message || '').includes('UNIQUE constraint failed: productos.sku')) {
-        throw new Error('Ya existe un producto con ese SKU')
+        throw new Error('Ya existe un producto con ese SKU', { cause: error })
       }
-      throw error
+      throw new Error('No se pudo crear el producto', { cause: error })
     }
   })
   ipcMain.handle('productos:crear', (_e, p) => crearProducto(p))
@@ -153,20 +155,91 @@ export function registerIpc() {
       const costoUnitario = stockActual > 0 ? Math.round(costoActual / stockActual) : 0
       const costoVenta = costoUnitario * it.cantidad
 
-      insItem.run(ventaId, it.producto_id, it.cantidad, it.precio_unitario, costoUnitario)
-      insMov.run(it.producto_id, 'salida', -it.cantidad, costoUnitario, fecha, 'venta:' + ventaId)
+      const itemInfo = insItem.run(ventaId, it.producto_id, it.cantidad, it.precio_unitario, costoUnitario)
+      const itemId = itemInfo.lastInsertRowid
+      insMov.run(it.producto_id, 'salida', -it.cantidad, costoUnitario, fecha, `venta:${ventaId}:item:${itemId}`)
       updCosto.run(Math.max(0, costoActual - costoVenta), it.producto_id)
     }
 
     return ventaId
   })
   ipcMain.handle('ventas:crear', (_e, data) => crearVenta(data))
+
+  const eliminarVenta = transaction((ventaItemId) => {
+    const item = db
+      .prepare(
+        `SELECT vi.id AS item_id, vi.venta_id, vi.producto_id, vi.cantidad, vi.costo_unitario, v.fecha
+         FROM venta_items vi
+         JOIN ventas v ON v.id = vi.venta_id
+         WHERE vi.id = ?`
+      )
+      .get(ventaItemId)
+
+    if (!item) {
+      const venta = db
+        .prepare(
+          `SELECT vi.id AS item_id, vi.venta_id, vi.producto_id, vi.cantidad, vi.costo_unitario, v.fecha
+           FROM venta_items vi
+           JOIN ventas v ON v.id = vi.venta_id
+           WHERE vi.venta_id = ?`
+        )
+        .all(ventaItemId)
+
+      if (!venta.length) throw new Error('Venta no encontrada')
+
+      for (const row of venta) {
+        db.prepare(
+          `UPDATE productos
+           SET costo = MAX(0, costo + ?)
+           WHERE id = ?`
+        ).run(Number(row.cantidad || 0) * Number(row.costo_unitario || 0), row.producto_id)
+
+        db.prepare(
+          `INSERT INTO movimientos (producto_id, tipo, cantidad, costo_unitario, fecha, referencia, nota)
+           VALUES (?, 'entrada', ?, ?, ?, ?, 'Anulación de venta')`
+        ).run(row.producto_id, Number(row.cantidad || 0), Number(row.costo_unitario || 0), row.fecha, `venta:${row.venta_id}:item:${row.item_id}`)
+      }
+
+      db.prepare('DELETE FROM movimientos WHERE referencia LIKE ?').run(`venta:${ventaItemId}:item:%`)
+      db.prepare('DELETE FROM venta_items WHERE venta_id = ?').run(ventaItemId)
+      const info = db.prepare('DELETE FROM ventas WHERE id = ?').run(ventaItemId)
+
+      if (info.changes === 0) throw new Error('Venta no encontrada')
+      return ventaItemId
+    }
+
+    db.prepare(
+      `UPDATE productos
+       SET costo = MAX(0, costo + ?)
+       WHERE id = ?`
+    ).run(Number(item.cantidad || 0) * Number(item.costo_unitario || 0), item.producto_id)
+
+    db.prepare(
+      `INSERT INTO movimientos (producto_id, tipo, cantidad, costo_unitario, fecha, referencia, nota)
+       VALUES (?, 'entrada', ?, ?, ?, ?, 'Anulación de venta')`
+    ).run(item.producto_id, Number(item.cantidad || 0), Number(item.costo_unitario || 0), item.fecha, `venta:${item.venta_id}:item:${item.item_id}`)
+
+    db.prepare('DELETE FROM movimientos WHERE referencia = ?').run(`venta:${item.venta_id}:item:${item.item_id}`)
+    db.prepare('DELETE FROM venta_items WHERE id = ?').run(item.item_id)
+
+    const remaining = db.prepare('SELECT COUNT(*) AS n FROM venta_items WHERE venta_id = ?').get(item.venta_id)
+    if ((remaining?.n ?? 0) === 0) {
+      db.prepare('DELETE FROM ventas WHERE id = ?').run(item.venta_id)
+    } else {
+      reconcileSaleTotal(db, item.venta_id)
+    }
+
+    return item.item_id
+  })
+  ipcMain.handle('ventas:eliminar', (_e, { id }) => eliminarVenta(Number(id)))
+
   ipcMain.handle('ventas:listar', (_e, categoriaId = null) => {
     let sql = `
-      SELECT v.id, v.fecha, v.total,
+      SELECT v.id, v.fecha,
              vi.id AS item_id, vi.producto_id, p.nombre AS producto,
              p.categoria_id, c.nombre AS categoria,
-             vi.cantidad, vi.precio_unitario, vi.costo_unitario
+             vi.cantidad, vi.precio_unitario, vi.costo_unitario,
+             (vi.cantidad * vi.precio_unitario) AS total
       FROM ventas v
       JOIN venta_items vi ON vi.venta_id = v.id
       JOIN productos p ON p.id = vi.producto_id
@@ -197,8 +270,6 @@ export function registerIpc() {
     const updCosto = db.prepare('UPDATE productos SET costo = ? WHERE id = ?')
     const getProducto = db.prepare('SELECT costo FROM productos WHERE id = ?')
 
-    let totalCompra = 0
-
     for (const it of items) {
       const productoActual = getProducto.get(it.producto_id)
       if (!productoActual) throw new Error('Producto no encontrado')
@@ -206,18 +277,71 @@ export function registerIpc() {
       const cantidad = Number(it.cantidad)
       const costoLote = Number(it.costo_unitario || 0)
 
-      totalCompra += costoLote
-      insItem.run(compraId, it.producto_id, cantidad, costoLote)
-      insMov.run(it.producto_id, 'entrada', cantidad, costoLote, fecha, 'compra:' + compraId)
+      const itemInfo = insItem.run(compraId, it.producto_id, cantidad, costoLote)
+      const itemId = Number(itemInfo.lastInsertRowid)
+      insMov.run(it.producto_id, 'entrada', cantidad, costoLote, fecha, `compra:${compraId}:item:${itemId}`)
 
       const nuevoCosto = Number(productoActual.costo || 0) + costoLote
       updCosto.run(nuevoCosto, it.producto_id)
     }
 
-    db.prepare('UPDATE compras SET total = ? WHERE id = ?').run(totalCompra, compraId)
+    reconcilePurchaseTotal(db, compraId)
     return compraId
   })
   ipcMain.handle('compras:crear', (_e, data) => crearCompra(data))
+
+  const eliminarCompra = transaction((compraItemId) => {
+    const item = db
+      .prepare(
+        `SELECT ci.id AS item_id, ci.compra_id, ci.producto_id, ci.cantidad, ci.costo_unitario, c.fecha
+         FROM compra_items ci
+         JOIN compras c ON c.id = ci.compra_id
+         WHERE ci.id = ?`
+      )
+      .get(Number(compraItemId))
+
+    if (!item) {
+      const rows = db
+        .prepare(
+          `SELECT ci.id AS item_id, ci.compra_id, ci.producto_id, ci.cantidad, ci.costo_unitario, c.fecha
+           FROM compra_items ci
+           JOIN compras c ON c.id = ci.compra_id
+           WHERE ci.compra_id = ?`
+        )
+        .all(Number(compraItemId))
+
+      if (!rows.length) throw new Error('Compra no encontrada')
+
+      for (const row of rows) {
+        db.prepare('UPDATE productos SET costo = MAX(0, costo - ?) WHERE id = ?')
+          .run(Number(row.costo_unitario || 0), row.producto_id)
+        db.prepare('DELETE FROM movimientos WHERE referencia = ?')
+          .run(`compra:${row.compra_id}:item:${row.item_id}`)
+      }
+
+      db.prepare('DELETE FROM compra_items WHERE compra_id = ?').run(Number(compraItemId))
+      db.prepare('DELETE FROM compras WHERE id = ?').run(Number(compraItemId))
+      return Number(compraItemId)
+    }
+
+    db.prepare('UPDATE productos SET costo = MAX(0, costo - ?) WHERE id = ?')
+      .run(Number(item.costo_unitario || 0), item.producto_id)
+
+    db.prepare('DELETE FROM movimientos WHERE referencia = ?')
+      .run(`compra:${item.compra_id}:item:${item.item_id}`)
+
+    db.prepare('DELETE FROM compra_items WHERE id = ?').run(item.item_id)
+
+    const remaining = db.prepare('SELECT COUNT(*) AS n FROM compra_items WHERE compra_id = ?').get(item.compra_id)
+    if ((remaining?.n ?? 0) === 0) {
+      db.prepare('DELETE FROM compras WHERE id = ?').run(item.compra_id)
+      return item.item_id
+    }
+
+    reconcilePurchaseTotal(db, item.compra_id)
+    return item.item_id
+  })
+  ipcMain.handle('compras:eliminar', (_e, { id }) => eliminarCompra(Number(id)))
 
   // ---------- Ajustes (mermas, daños, regalos) ----------
   ipcMain.handle('inventario:ajustar', (_e, { producto_id, cantidad, nota, fecha = hoy() }) => {

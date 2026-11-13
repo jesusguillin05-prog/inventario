@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { defaultBranding } from '../utils/branding'
 import {
   errorMessage,
+  formatMoney,
   formatMoneyInput,
   normalizeInputValue,
   parseMoneyInput,
@@ -10,7 +11,6 @@ import {
 } from '../utils/format'
 
 export const emptyProductForm = {
-  sku: '',
   nombre: '',
   costo: '',
   precio: '',
@@ -32,7 +32,7 @@ export const emptyPurchaseForm = {
 
 export const emptyExpenseForm = {
   fecha: today(),
-  categoria: 'transporte',
+  categoria: 'otro',
   descripcion: '',
   monto: ''
 }
@@ -54,6 +54,8 @@ export const defaultReport = {
   masVendidos: []
 }
 
+const makeCartItemId = () => `${Date.now()}-${Math.random().toString(16).slice(2)}`
+
 export function useInventoryData() {
   const [tab, setTab] = useState('dashboard')
   const [categorias, setCategorias] = useState([])
@@ -73,10 +75,13 @@ export function useInventoryData() {
   const [saleForm, setSaleForm] = useState(emptySaleForm)
   const [purchaseForm, setPurchaseForm] = useState(emptyPurchaseForm)
   const [expenseForm, setExpenseForm] = useState(emptyExpenseForm)
+  const [gastos, setGastos] = useState([])
   const [adjustmentForm, setAdjustmentForm] = useState(emptyAdjustmentForm)
   const [pendingDelete, setPendingDelete] = useState(null)
+  const [confirmation, setConfirmation] = useState(null)
   const [saleCart, setSaleCart] = useState([])
   const [purchaseCart, setPurchaseCart] = useState([])
+  const [recentAdjustments, setRecentAdjustments] = useState([])
   const [branding, setBranding] = useState(() => {
     if (typeof window === 'undefined') return defaultBranding
 
@@ -116,10 +121,10 @@ export function useInventoryData() {
 
   const productosStockBajo = useMemo(
     () =>
-      productosActivos.filter(
-        (producto) =>
-          Number(producto.stock_minimo) > 0 && Number(producto.stock) <= Number(producto.stock_minimo)
-      ),
+      productosActivos.filter((producto) => {
+        const stock = Number(producto.stock ?? 0)
+        return stock <= 3
+      }),
     [productosActivos]
   )
 
@@ -133,7 +138,7 @@ export function useInventoryData() {
       )
         return false
       if (!q) return true
-      return [producto.nombre, producto.sku, producto.categoria].some((v) =>
+      return [producto.nombre, producto.categoria].some((v) =>
         String(v ?? '')
           .toLowerCase()
           .includes(q)
@@ -148,17 +153,19 @@ export function useInventoryData() {
 
   const loadData = useCallback(async () => {
     try {
-      const [categoriasData, productosData, ventasData, resumenData] = await Promise.all([
+      const [categoriasData, productosData, ventasData, resumenData, gastosData] = await Promise.all([
         window.api.categorias.listar(),
         window.api.productos.listar({ includeInactive: true }),
         window.api.ventas.listar(ventasCategoryId || null),
-        window.api.reportes.mensual(reportMonth, reportCategoryId || null)
+        window.api.reportes.mensual(reportMonth, reportCategoryId || null),
+        window.api.gastos.listar(reportMonth)
       ])
 
       setCategorias(categoriasData)
       setProductos(productosData)
       setVentas(ventasData)
       setReport(resumenData)
+      setGastos(gastosData)
     } catch (error) {
       setStatus(errorMessage(error, 'Error al cargar los datos'))
     }
@@ -231,7 +238,6 @@ export function useInventoryData() {
   const handleEditProduct = (producto) => {
     setProductForm({
       id: String(producto.id),
-      sku: producto.sku || '',
       nombre: producto.nombre || '',
       costo: producto.costo ?? '',
       precio: producto.precio ?? '',
@@ -307,7 +313,6 @@ export function useInventoryData() {
 
     const payload = {
       id: productForm.id ? Number(productForm.id) : null,
-      sku: productForm.sku.trim(),
       nombre: productForm.nombre.trim(),
       categoria_id: Number(selectedCategoryId),
       costo: costoLote,
@@ -374,6 +379,7 @@ export function useInventoryData() {
       return [
         ...current,
         {
+          cartId: makeCartItemId(),
           producto_id: Number(producto.id),
           nombre: producto.nombre,
           cantidad,
@@ -387,8 +393,8 @@ export function useInventoryData() {
     setSaleForm(emptySaleForm)
   }
 
-  const removeFromSaleCart = (productoId) => {
-    setSaleCart((current) => current.filter((item) => String(item.producto_id) !== String(productoId)))
+  const removeFromSaleCart = (itemToRemove) => {
+    setSaleCart((current) => current.filter((item) => item !== itemToRemove))
   }
 
   const saleCartTotal = useMemo(
@@ -403,29 +409,77 @@ export function useInventoryData() {
   const handleSaleSubmit = async (event) => {
     event.preventDefault()
 
-    if (!saleCart.length) {
-      setStatus('Agrega al menos un producto al carrito')
+    const itemsForSale = saleCart.length
+      ? saleCart
+      : saleForm.producto_id
+        ? [{
+            producto_id: Number(saleForm.producto_id),
+            cantidad: Number(saleForm.cantidad || 0),
+            precio_unitario: Number(saleForm.precio_unitario || 0),
+            nombre: productosActivos.find(
+              (item) => String(item.id) === String(saleForm.producto_id)
+            )?.nombre || 'Producto'
+          }]
+        : []
+
+    if (!itemsForSale.length) {
+      setStatus('Agrega un producto o selecciona uno para vender')
       return
     }
 
-    try {
-      await window.api.ventas.crear({
-        fecha: today(),
-        metodo_pago: 'efectivo',
-        items: saleCart.map((item) => ({
-          producto_id: Number(item.producto_id),
-          cantidad: Number(item.cantidad),
-          precio_unitario: Number(item.precio_unitario)
-        }))
-      })
+    const totalDirecto = itemsForSale.reduce(
+      (sum, item) => sum + Number(item.cantidad || 0) * Number(item.precio_unitario || 0),
+      0
+    )
 
-      setStatus('Venta registrada con éxito')
-      setSaleCart([])
-      setSaleForm(emptySaleForm)
-      await loadData()
-    } catch (error) {
-      setStatus(errorMessage(error, 'No se pudo registrar la venta'))
-    }
+    setConfirmation({
+      title: 'Confirmar venta',
+      message: `¿Seguro que deseas registrar esta venta por ${formatMoney(totalDirecto)}?`,
+      onConfirm: async () => {
+        try {
+          const payloadItems = itemsForSale.map((item) => ({
+            producto_id: Number(item.producto_id),
+            cantidad: Number(item.cantidad),
+            precio_unitario: Number(item.precio_unitario)
+          }))
+
+          await window.api.ventas.crear({
+            fecha: today(),
+            metodo_pago: 'efectivo',
+            items: payloadItems
+          })
+
+          setStatus('Venta registrada con éxito')
+          setSaleCart([])
+          setSaleForm(emptySaleForm)
+          setConfirmation(null)
+          await loadData()
+        } catch (error) {
+          setStatus(errorMessage(error, 'No se pudo registrar la venta'))
+          setConfirmation(null)
+        }
+      },
+      onCancel: () => setConfirmation(null)
+    })
+  }
+
+  const handleDeleteSale = async (itemId) => {
+    setConfirmation({
+      title: 'Eliminar venta',
+      message: '¿Seguro que quieres eliminar esta venta? El stock se devolverá.',
+      onConfirm: async () => {
+        try {
+          await window.api.ventas.eliminar({ id: itemId })
+          setStatus('Venta eliminada. El stock ha sido devuelto.')
+          setConfirmation(null)
+          await loadData()
+        } catch (error) {
+          setStatus(errorMessage(error, 'No se pudo eliminar la venta'))
+          setConfirmation(null)
+        }
+      },
+      onCancel: () => setConfirmation(null)
+    })
   }
 
   const addToPurchaseCart = () => {
@@ -465,6 +519,7 @@ export function useInventoryData() {
       return [
         ...current,
         {
+          cartId: makeCartItemId(),
           producto_id: Number(producto.id),
           nombre: producto.nombre,
           cantidad,
@@ -477,10 +532,8 @@ export function useInventoryData() {
     setPurchaseForm(emptyPurchaseForm)
   }
 
-  const removeFromPurchaseCart = (productoId) => {
-    setPurchaseCart((current) =>
-      current.filter((item) => String(item.producto_id) !== String(productoId))
-    )
+  const removeFromPurchaseCart = (itemToRemove) => {
+    setPurchaseCart((current) => current.filter((item) => item !== itemToRemove))
   }
 
   const purchaseCartTotal = useMemo(
@@ -536,7 +589,7 @@ export function useInventoryData() {
     try {
       await window.api.gastos.crear({
         fecha: expenseForm.fecha,
-        categoria: expenseForm.categoria,
+        categoria: expenseForm.categoria || 'otro',
         descripcion: expenseForm.descripcion,
         monto: Number(expenseForm.monto || 0)
       })
@@ -557,6 +610,10 @@ export function useInventoryData() {
       return
     }
 
+    const currentProduct = productosActivos.find(
+      (producto) => String(producto.id) === String(adjustmentForm.producto_id)
+    )
+
     try {
       await window.api.inventario.ajustar({
         producto_id: Number(adjustmentForm.producto_id),
@@ -564,6 +621,20 @@ export function useInventoryData() {
         nota: adjustmentForm.nota || 'Ajuste manual',
         fecha: today()
       })
+
+      const nota = adjustmentForm.nota || 'Ajuste manual'
+      const cantidad = Number(adjustmentForm.cantidad || 0)
+
+      setRecentAdjustments((current) => [
+        {
+          id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+          producto: currentProduct?.nombre || 'Producto',
+          cantidad,
+          nota,
+          fecha: today()
+        },
+        ...current
+      ].slice(0, 6))
 
       setStatus('Ajuste de inventario aplicado')
       setAdjustmentForm(emptyAdjustmentForm)
@@ -610,10 +681,14 @@ export function useInventoryData() {
     setPurchaseForm,
     expenseForm,
     setExpenseForm,
+    gastos,
     adjustmentForm,
     setAdjustmentForm,
+    recentAdjustments,
     pendingDelete,
     setPendingDelete,
+    confirmation,
+    setConfirmation,
     saleCart,
     setSaleCart,
     purchaseCart,
@@ -639,6 +714,7 @@ export function useInventoryData() {
     addToSaleCart,
     removeFromSaleCart,
     handleSaleSubmit,
+    handleDeleteSale,
     addToPurchaseCart,
     removeFromPurchaseCart,
     handlePurchaseSubmit,

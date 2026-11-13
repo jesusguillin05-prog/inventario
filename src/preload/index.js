@@ -24,8 +24,15 @@ contextBridge.exposeInMainWorld('api', {
     toggle: invoke('productos:toggle'),
     eliminar: invoke('productos:eliminar')
   },
-  ventas: { crear: invoke('ventas:crear'), listar: invoke('ventas:listar') },
-  compras: { crear: invoke('compras:crear') },
+  ventas: {
+    crear: invoke('ventas:crear'),
+    listar: invoke('ventas:listar'),
+    eliminar: invoke('ventas:eliminar')
+  },
+  compras: {
+    crear: invoke('compras:crear'),
+    eliminar: invoke('compras:eliminar')
+  },
   inventario: { ajustar: invoke('inventario:ajustar') },
   gastos: { crear: invoke('gastos:crear'), listar: invoke('gastos:listar') },
   reportes: { mensual: invoke('reportes:mensual') }

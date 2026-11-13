@@ -1,8 +1,9 @@
+import { useState } from 'react'
+import PropTypes from 'prop-types'
 import Panel from '../components/Panel'
 import { formatMoney, normalizeInputValue } from '../utils/format'
 
 export default function ComprasPage({
-  productos,
   productosActivos,
   purchaseForm,
   setPurchaseForm,
@@ -13,8 +14,15 @@ export default function ComprasPage({
   purchaseCartTotal,
   adjustmentForm,
   setAdjustmentForm,
-  handleAdjustmentSubmit
+  handleAdjustmentSubmit,
+  recentAdjustments
 }) {
+  const [productSearchText, setProductSearchText] = useState('')
+  const selectedProduct = productosActivos.find(
+    (producto) => String(producto.id) === String(purchaseForm.producto_id)
+  )
+  const productInputValue = selectedProduct ? selectedProduct.nombre : productSearchText
+
   return (
     <section className="grid-2">
       <Panel>
@@ -22,27 +30,41 @@ export default function ComprasPage({
           <h2>Carrito de compras</h2>
         </div>
 
-        <form className="stack-form" onSubmit={handlePurchaseSubmit}>
+        <form
+          className="stack-form"
+          onSubmit={(event) => {
+            handlePurchaseSubmit(event)
+            setProductSearchText('')
+          }}
+        >
           <label>
             Producto
-            <select
-              value={normalizeInputValue(purchaseForm.producto_id)}
+            <input
+              list="productos-compra"
+              value={productInputValue}
               onChange={(event) => {
-                const producto = productos.find((p) => String(p.id) === String(event.target.value))
+                const nombre = event.target.value
+                setProductSearchText(nombre)
+
+                const producto = productosActivos.find(
+                  (item) => item.nombre.toLowerCase() === nombre.trim().toLowerCase()
+                )
+
                 setPurchaseForm((current) => ({
                   ...current,
-                  producto_id: event.target.value,
-                  costo_unitario: producto ? producto.costo : ''
+                  producto_id: producto ? String(producto.id) : '',
+                  costo_unitario: producto ? producto.costo : current.costo_unitario
                 }))
               }}
-            >
-              <option value="">Selecciona</option>
+              placeholder="Escribe el nombre del producto"
+            />
+            <datalist id="productos-compra">
               {productosActivos.map((producto) => (
-                <option key={producto.id} value={producto.id}>
-                  {producto.nombre}
+                <option key={producto.id} value={producto.nombre}>
+                  {producto.nombre} (stock: {producto.stock})
                 </option>
               ))}
-            </select>
+            </datalist>
           </label>
 
           <div className="field-row two-col">
@@ -77,7 +99,14 @@ export default function ComprasPage({
           </div>
 
           <div className="inline-actions">
-            <button type="button" className="secondary-btn" onClick={addToPurchaseCart}>
+            <button
+              type="button"
+              className="secondary-btn"
+              onClick={() => {
+                addToPurchaseCart()
+                setProductSearchText('')
+              }}
+            >
               Agregar al carrito
             </button>
             <button type="submit" className="primary-btn">
@@ -95,7 +124,7 @@ export default function ComprasPage({
           {purchaseCart.length ? (
             <div className="cart-list">
               {purchaseCart.map((item) => (
-                <div key={item.producto_id} className="cart-row">
+                <div key={item.cartId ?? item.producto_id} className="cart-row">
                   <div>
                     <span>{item.nombre}</span>
                     <small>
@@ -107,7 +136,7 @@ export default function ComprasPage({
                     <button
                       type="button"
                       className="text-btn"
-                      onClick={() => removeFromPurchaseCart(item.producto_id)}
+                      onClick={() => removeFromPurchaseCart(item)}
                     >
                       Quitar
                     </button>
@@ -138,22 +167,33 @@ export default function ComprasPage({
         <form onSubmit={handleAdjustmentSubmit} className="stack-form">
           <label>
             Producto
-            <select
-              value={normalizeInputValue(adjustmentForm.producto_id)}
-              onChange={(event) =>
+            <input
+              list="productos-ajuste"
+              value={
+                productosActivos.find(
+                  (producto) => String(producto.id) === String(adjustmentForm.producto_id)
+                )?.nombre ?? ''
+              }
+              onChange={(event) => {
+                const nombre = event.target.value
+                const producto = productosActivos.find(
+                  (item) => item.nombre.toLowerCase() === nombre.trim().toLowerCase()
+                )
+
                 setAdjustmentForm((current) => ({
                   ...current,
-                  producto_id: event.target.value
+                  producto_id: producto ? String(producto.id) : ''
                 }))
-              }
-            >
-              <option value="">Selecciona</option>
+              }}
+              placeholder="Escribe el nombre del producto"
+            />
+            <datalist id="productos-ajuste">
               {productosActivos.map((producto) => (
-                <option key={producto.id} value={producto.id}>
+                <option key={producto.id} value={producto.nombre}>
                   {producto.nombre} (stock: {producto.stock})
                 </option>
               ))}
-            </select>
+            </datalist>
           </label>
 
           <div className="field-row two-col">
@@ -186,7 +226,82 @@ export default function ComprasPage({
             Aplicar ajuste
           </button>
         </form>
+
+        {recentAdjustments.length > 0 && (
+          <div className="recent-adjustments">
+            <div className="panel-header compact">
+              <h3>Últimos ajustes</h3>
+            </div>
+            <ul className="simple-list">
+              {recentAdjustments.map((ajuste) => (
+                <li key={ajuste.id}>
+                  <div>
+                    <span>{ajuste.producto}</span>
+                    <small>{ajuste.nota}</small>
+                  </div>
+                  <strong>
+                    {ajuste.cantidad > 0 ? '+' : ''}
+                    {ajuste.cantidad}
+                  </strong>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </Panel>
     </section>
   )
+}
+
+ComprasPage.propTypes = {
+  productos: PropTypes.arrayOf(
+    PropTypes.shape({
+      id: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+      nombre: PropTypes.string,
+      costo: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+      stock: PropTypes.oneOfType([PropTypes.number, PropTypes.string])
+    })
+  ).isRequired,
+  productosActivos: PropTypes.arrayOf(
+    PropTypes.shape({
+      id: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+      nombre: PropTypes.string,
+      stock: PropTypes.oneOfType([PropTypes.number, PropTypes.string])
+    })
+  ).isRequired,
+  purchaseForm: PropTypes.shape({
+    producto_id: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+    cantidad: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+    costo_unitario: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+    nota: PropTypes.oneOfType([PropTypes.number, PropTypes.string])
+  }).isRequired,
+  setPurchaseForm: PropTypes.func.isRequired,
+  addToPurchaseCart: PropTypes.func.isRequired,
+  handlePurchaseSubmit: PropTypes.func.isRequired,
+  purchaseCart: PropTypes.arrayOf(
+    PropTypes.shape({
+      producto_id: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+      nombre: PropTypes.string,
+      cantidad: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+      costo_unitario: PropTypes.oneOfType([PropTypes.number, PropTypes.string])
+    })
+  ).isRequired,
+  removeFromPurchaseCart: PropTypes.func.isRequired,
+  purchaseCartTotal: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+  adjustmentForm: PropTypes.shape({
+    producto_id: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+    cantidad: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+    nota: PropTypes.oneOfType([PropTypes.number, PropTypes.string])
+  }).isRequired,
+  setAdjustmentForm: PropTypes.func.isRequired,
+  handleAdjustmentSubmit: PropTypes.func.isRequired,
+  recentAdjustments: PropTypes.arrayOf(
+    PropTypes.shape({
+      id: PropTypes.string,
+      producto: PropTypes.string,
+      cantidad: PropTypes.number,
+      nota: PropTypes.string,
+      fecha: PropTypes.string
+    })
+  ).isRequired
 }

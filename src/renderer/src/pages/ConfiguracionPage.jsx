@@ -1,5 +1,6 @@
+import PropTypes from 'prop-types'
 import Panel from '../components/Panel'
-import { colorPresets, defaultBranding } from '../utils/branding'
+import { colorPresets } from '../utils/branding'
 
 export default function ConfiguracionPage({
   branding,
@@ -108,4 +109,17 @@ export default function ConfiguracionPage({
       </div>
     </Panel>
   )
+}
+
+ConfiguracionPage.propTypes = {
+  branding: PropTypes.shape({
+    nombreEmpresa: PropTypes.string,
+    primaryColor: PropTypes.string,
+    secondaryColor: PropTypes.string,
+    backgroundColor: PropTypes.string,
+    logoDataUrl: PropTypes.string
+  }).isRequired,
+  setBranding: PropTypes.func.isRequired,
+  handleLogoUpload: PropTypes.func.isRequired,
+  handleResetBranding: PropTypes.func.isRequired
 }

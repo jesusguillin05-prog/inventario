@@ -1,3 +1,4 @@
+import PropTypes from 'prop-types'
 import Panel from '../components/Panel'
 import { formatMoney } from '../utils/format'
 
@@ -72,4 +73,31 @@ export default function DashboardPage({ report, productosStockBajo, ventas, setT
       </section>
     </>
   )
+}
+
+DashboardPage.propTypes = {
+  report: PropTypes.shape({
+    ingresos: PropTypes.number,
+    costoVendido: PropTypes.number,
+    utilidadBruta: PropTypes.number,
+    valorInventario: PropTypes.number
+  }).isRequired,
+  productosStockBajo: PropTypes.arrayOf(
+    PropTypes.shape({
+      id: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+      nombre: PropTypes.string,
+      stock: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+      stock_minimo: PropTypes.oneOfType([PropTypes.number, PropTypes.string])
+    })
+  ).isRequired,
+  ventas: PropTypes.arrayOf(
+    PropTypes.shape({
+      id: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+      item_id: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+      producto: PropTypes.string,
+      cantidad: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+      total: PropTypes.oneOfType([PropTypes.number, PropTypes.string])
+    })
+  ).isRequired,
+  setTab: PropTypes.func.isRequired
 }

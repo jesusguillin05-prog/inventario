@@ -50,7 +50,11 @@ export default function DashboardPage({ report, productosStockBajo, ventas, setT
         <Panel>
           <div className="panel-header">
             <h2>Últimas ventas</h2>
-            <button type="button" className="secondary-btn small-btn" onClick={() => setTab('ventas')}>
+            <button
+              type="button"
+              className="secondary-btn small-btn"
+              onClick={() => setTab('ventas')}
+            >
               Ver todas
             </button>
           </div>

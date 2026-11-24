@@ -1,7 +1,12 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import Database from 'better-sqlite3'
-import { getProductList, normalizeSku, updateProduct, toggleProduct } from '../src/main/inventoryQueries.js'
+import {
+  getProductList,
+  normalizeSku,
+  updateProduct,
+  toggleProduct
+} from '../src/main/inventoryQueries.js'
 import { getMonthlyReport } from '../src/main/reportQueries.js'
 import { reconcilePurchaseTotal } from '../src/main/purchaseUtils.js'
 import { reconcileSaleTotal } from '../src/main/saleUtils.js'
@@ -16,6 +21,7 @@ const schema = `
     costo INTEGER NOT NULL DEFAULT 0,
     precio INTEGER NOT NULL DEFAULT 0,
     stock_minimo INTEGER NOT NULL DEFAULT 0,
+    imagen TEXT,
     activo INTEGER NOT NULL DEFAULT 1
   );
   CREATE TABLE movimientos (
@@ -33,6 +39,25 @@ const schema = `
     FROM productos p LEFT JOIN movimientos m ON m.producto_id = p.id
     GROUP BY p.id;
 `
+
+test('guarda la ruta local de la imagen del producto sin almacenarla en blob', () => {
+  const db = new Database(':memory:')
+  db.exec(schema)
+
+  const categoriaId = db
+    .prepare('INSERT INTO categorias (nombre) VALUES (?)')
+    .run('Labiales').lastInsertRowid
+
+  const savedPath = 'C:/Users/demo/AppData/Roaming/inventario/product-images/labial.png'
+  const productId = db
+    .prepare(
+      'INSERT INTO productos (nombre, categoria_id, costo, precio, stock_minimo, imagen, activo) VALUES (?, ?, ?, ?, ?, ?, 1)'
+    )
+    .run('Labial lote', categoriaId, 400000, 12000, 2, savedPath).lastInsertRowid
+
+  const producto = db.prepare('SELECT imagen FROM productos WHERE id = ?').get(productId)
+  assert.equal(producto.imagen, savedPath)
+})
 
 test('guarda el costo del lote al crear el producto sin convertirlo a costo unitario', () => {
   const db = new Database(':memory:')
@@ -257,25 +282,36 @@ test('recalcula el total de la compra al quitar un producto del carrito', () => 
     .run('2026-11-11', null, 22000).lastInsertRowid
 
   const itemUno = db
-    .prepare('INSERT INTO compra_items (compra_id, producto_id, cantidad, costo_unitario) VALUES (?, ?, ?, ?)')
+    .prepare(
+      'INSERT INTO compra_items (compra_id, producto_id, cantidad, costo_unitario) VALUES (?, ?, ?, ?)'
+    )
     .run(compraId, productoUno, 1, 10000).lastInsertRowid
   const itemDos = db
-    .prepare('INSERT INTO compra_items (compra_id, producto_id, cantidad, costo_unitario) VALUES (?, ?, ?, ?)')
+    .prepare(
+      'INSERT INTO compra_items (compra_id, producto_id, cantidad, costo_unitario) VALUES (?, ?, ?, ?)'
+    )
     .run(compraId, productoDos, 1, 12000).lastInsertRowid
 
-  db.prepare('INSERT INTO movimientos (producto_id, tipo, cantidad, costo_unitario, fecha, referencia) VALUES (?, ?, ?, ?, ?, ?)')
-    .run(productoUno, 'entrada', 1, 10000, '2026-11-11', `compra:${compraId}:item:${itemUno}`)
-  db.prepare('INSERT INTO movimientos (producto_id, tipo, cantidad, costo_unitario, fecha, referencia) VALUES (?, ?, ?, ?, ?, ?)')
-    .run(productoDos, 'entrada', 1, 12000, '2026-11-11', `compra:${compraId}:item:${itemDos}`)
+  db.prepare(
+    'INSERT INTO movimientos (producto_id, tipo, cantidad, costo_unitario, fecha, referencia) VALUES (?, ?, ?, ?, ?, ?)'
+  ).run(productoUno, 'entrada', 1, 10000, '2026-11-11', `compra:${compraId}:item:${itemUno}`)
+  db.prepare(
+    'INSERT INTO movimientos (producto_id, tipo, cantidad, costo_unitario, fecha, referencia) VALUES (?, ?, ?, ?, ?, ?)'
+  ).run(productoDos, 'entrada', 1, 12000, '2026-11-11', `compra:${compraId}:item:${itemDos}`)
 
-  db.prepare('DELETE FROM movimientos WHERE referencia = ?').run(`compra:${compraId}:item:${itemUno}`)
+  db.prepare('DELETE FROM movimientos WHERE referencia = ?').run(
+    `compra:${compraId}:item:${itemUno}`
+  )
   db.prepare('DELETE FROM compra_items WHERE id = ?').run(itemUno)
 
   reconcilePurchaseTotal(db, compraId)
 
   const compra = db.prepare('SELECT total FROM compras WHERE id = ?').get(compraId)
   assert.equal(compra.total, 12000)
-  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM compra_items WHERE compra_id = ?').get(compraId).n, 1)
+  assert.equal(
+    db.prepare('SELECT COUNT(*) AS n FROM compra_items WHERE compra_id = ?').get(compraId).n,
+    1
+  )
 })
 
 test('recalcula el total de la venta al quitar un producto del ticket', () => {
@@ -339,11 +375,14 @@ test('recalcula el total de la venta al quitar un producto del ticket', () => {
     .run('2026-11-11', 'efectivo', 22000).lastInsertRowid
 
   const itemUno = db
-    .prepare('INSERT INTO venta_items (venta_id, producto_id, cantidad, precio_unitario, costo_unitario) VALUES (?, ?, ?, ?, ?)')
+    .prepare(
+      'INSERT INTO venta_items (venta_id, producto_id, cantidad, precio_unitario, costo_unitario) VALUES (?, ?, ?, ?, ?)'
+    )
     .run(ventaId, productoUno, 1, 10000, 5000).lastInsertRowid
 
-  db.prepare('INSERT INTO venta_items (venta_id, producto_id, cantidad, precio_unitario, costo_unitario) VALUES (?, ?, ?, ?, ?)')
-    .run(ventaId, productoDos, 1, 12000, 5000)
+  db.prepare(
+    'INSERT INTO venta_items (venta_id, producto_id, cantidad, precio_unitario, costo_unitario) VALUES (?, ?, ?, ?, ?)'
+  ).run(ventaId, productoDos, 1, 12000, 5000)
 
   db.prepare('DELETE FROM movimientos WHERE referencia = ?').run(`venta:${ventaId}:item:${itemUno}`)
   db.prepare('DELETE FROM venta_items WHERE id = ?').run(itemUno)
@@ -352,7 +391,10 @@ test('recalcula el total de la venta al quitar un producto del ticket', () => {
 
   const venta = db.prepare('SELECT total FROM ventas WHERE id = ?').get(ventaId)
   assert.equal(venta.total, 12000)
-  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM venta_items WHERE venta_id = ?').get(ventaId).n, 1)
+  assert.equal(
+    db.prepare('SELECT COUNT(*) AS n FROM venta_items WHERE venta_id = ?').get(ventaId).n,
+    1
+  )
 })
 
 test('normaliza SKU vacío para permitir varios productos sin código', () => {

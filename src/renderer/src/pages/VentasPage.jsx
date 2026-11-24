@@ -149,7 +149,9 @@ export default function VentasPage({
             </div>
           </div>
         ) : (
-          <div className="empty-note">El carrito está vacío. Agrega productos para comenzar la venta.</div>
+          <div className="empty-note">
+            El carrito está vacío. Agrega productos para comenzar la venta.
+          </div>
         )}
       </Panel>
 

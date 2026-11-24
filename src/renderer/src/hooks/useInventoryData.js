@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { defaultBranding } from '../utils/branding'
+import { useBranding } from './useBranding'
+import { useProductCatalog } from './useProductCatalog'
 import {
   errorMessage,
   formatMoney,
@@ -15,7 +16,8 @@ export const emptyProductForm = {
   costo: '',
   precio: '',
   stock_minimo: '',
-  stock_inicial: ''
+  stock_inicial: '',
+  imagen: ''
 }
 
 export const emptySaleForm = {
@@ -82,107 +84,46 @@ export function useInventoryData() {
   const [saleCart, setSaleCart] = useState([])
   const [purchaseCart, setPurchaseCart] = useState([])
   const [recentAdjustments, setRecentAdjustments] = useState([])
-  const [branding, setBranding] = useState(() => {
-    if (typeof window === 'undefined') return defaultBranding
-
-    try {
-      const stored = JSON.parse(window.localStorage.getItem('inventario-branding') || 'null')
-      return stored ? { ...defaultBranding, ...stored } : defaultBranding
-    } catch {
-      return defaultBranding
-    }
+  const { branding, setBranding, handleLogoUpload, handleResetBranding } = useBranding()
+  const {
+    selectedCategoryForProducts,
+    categoriaActual,
+    productosActivos,
+    productosStockBajo,
+    productosPorCategoria
+  } = useProductCatalog({
+    categorias,
+    productos,
+    selectedCategoryId,
+    productSearch,
+    productSortBy,
+    showInactiveProducts
   })
 
-  const selectedCategoryForProducts = useMemo(() => {
-    if (!categorias.length) return ''
-
-    if (
-      selectedCategoryId &&
-      categorias.some((categoria) => String(categoria.id) === String(selectedCategoryId))
-    ) {
-      return selectedCategoryId
+  const loadData = useCallback(async () => {
+    if (typeof window === 'undefined' || !window.api) {
+      return
     }
 
-    return String(categorias[0].id)
-  }, [categorias, selectedCategoryId])
-
-  const categoriaActual = useMemo(
-    () =>
-      categorias.find(
-        (categoria) => String(categoria.id) === String(selectedCategoryForProducts)
-      ) || null,
-    [categorias, selectedCategoryForProducts]
-  )
-
-  const productosActivos = useMemo(
-    () => productos.filter((producto) => Number(producto.activo) === 1),
-    [productos]
-  )
-
-  const productosStockBajo = useMemo(
-    () =>
-      productosActivos.filter((producto) => {
-        const stock = Number(producto.stock ?? 0)
-        return stock <= 3
-      }),
-    [productosActivos]
-  )
-
-  const productosPorCategoria = useMemo(() => {
-    const q = productSearch.trim().toLowerCase()
-    const lista = productos.filter((producto) => {
-      if (!showInactiveProducts && Number(producto.activo) !== 1) return false
-      if (
-        selectedCategoryForProducts &&
-        String(producto.categoria_id) !== String(selectedCategoryForProducts)
-      )
-        return false
-      if (!q) return true
-      return [producto.nombre, producto.categoria].some((v) =>
-        String(v ?? '')
-          .toLowerCase()
-          .includes(q)
-      )
-    })
-    return lista.sort((x, y) =>
-      productSortBy === 'nombre'
-        ? String(x.nombre).localeCompare(String(y.nombre), 'es')
-        : Number(x[productSortBy] ?? 0) - Number(y[productSortBy] ?? 0)
-    )
-  }, [productos, selectedCategoryForProducts, productSearch, productSortBy, showInactiveProducts])
-
-  const loadData = useCallback(async () => {
     try {
-      const [categoriasData, productosData, ventasData, resumenData, gastosData] = await Promise.all([
-        window.api.categorias.listar(),
-        window.api.productos.listar({ includeInactive: true }),
-        window.api.ventas.listar(ventasCategoryId || null),
-        window.api.reportes.mensual(reportMonth, reportCategoryId || null),
-        window.api.gastos.listar(reportMonth)
-      ])
+      const [categoriasData, productosData, ventasData, resumenData, gastosData] =
+        await Promise.all([
+          window.api.categorias.listar(),
+          window.api.productos.listar({ includeInactive: true }),
+          window.api.ventas.listar(ventasCategoryId || null),
+          window.api.reportes.mensual(reportMonth, reportCategoryId || null),
+          window.api.gastos.listar(reportMonth)
+        ])
 
-      setCategorias(categoriasData)
-      setProductos(productosData)
-      setVentas(ventasData)
-      setReport(resumenData)
-      setGastos(gastosData)
+      setCategorias(Array.isArray(categoriasData) ? categoriasData : [])
+      setProductos(Array.isArray(productosData) ? productosData : [])
+      setVentas(Array.isArray(ventasData) ? ventasData : [])
+      setReport(resumenData && typeof resumenData === 'object' ? resumenData : defaultReport)
+      setGastos(Array.isArray(gastosData) ? gastosData : [])
     } catch (error) {
       setStatus(errorMessage(error, 'Error al cargar los datos'))
     }
   }, [reportCategoryId, reportMonth, ventasCategoryId])
-
-  useEffect(() => {
-    window.localStorage.setItem('inventario-branding', JSON.stringify(branding))
-  }, [branding])
-
-  useEffect(() => {
-    const root = document.documentElement.style
-    root.setProperty('--primary', branding.primaryColor)
-    root.setProperty('--primary-strong', branding.secondaryColor)
-    root.setProperty('--bg-1', branding.backgroundColor)
-    root.setProperty('--bg-2', branding.backgroundColor)
-    root.setProperty('--text', branding.textColor)
-  }, [branding])
 
   useEffect(() => {
     if (!status) return undefined
@@ -197,22 +138,6 @@ export function useInventoryData() {
 
     return () => clearTimeout(timeoutId)
   }, [loadData])
-
-  const handleLogoUpload = (event) => {
-    const file = event.target.files?.[0]
-    if (!file) return
-
-    const reader = new FileReader()
-    reader.onload = () => {
-      setBranding((current) => ({ ...current, logoDataUrl: String(reader.result || '') }))
-    }
-    reader.readAsDataURL(file)
-    event.target.value = ''
-  }
-
-  const handleResetBranding = () => {
-    setBranding(defaultBranding)
-  }
 
   const handleCreateCategory = async (event) => {
     event.preventDefault()
@@ -242,9 +167,33 @@ export function useInventoryData() {
       costo: producto.costo ?? '',
       precio: producto.precio ?? '',
       stock_minimo: producto.stock_minimo ?? '',
-      stock_inicial: ''
+      stock_inicial: '',
+      imagen: producto.imagen || ''
     })
     setSelectedCategoryId(String(producto.categoria_id ?? selectedCategoryForProducts))
+  }
+
+  const handleProductImageUpload = async (event) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(String(reader.result || ''))
+      reader.onerror = () => reject(new Error('No se pudo leer la imagen'))
+      reader.readAsDataURL(file)
+    })
+
+    const savedPath = await window.api.productos.guardarImagen({
+      dataUrl,
+      nombre: productForm.nombre || file.name || 'producto'
+    })
+
+    setProductForm((current) => ({
+      ...current,
+      imagen: savedPath
+    }))
+    event.target.value = ''
   }
 
   const handleToggleProduct = async (productoId, activo) => {
@@ -304,7 +253,7 @@ export function useInventoryData() {
 
     if (!selectedCategoryId) {
       setStatus('Primero crea o selecciona una categoría')
-      return
+      return false
     }
 
     const stockInicial = Number(productForm.stock_inicial || 0)
@@ -318,12 +267,13 @@ export function useInventoryData() {
       costo: costoLote,
       precio: precioUnitario,
       stock_minimo: Number(productForm.stock_minimo || 0),
-      stock_inicial: productForm.id ? 0 : stockInicial
+      stock_inicial: productForm.id ? 0 : stockInicial,
+      imagen: productForm.imagen || null
     }
 
     if (!payload.nombre) {
       setStatus('El nombre del producto es obligatorio')
-      return
+      return false
     }
 
     try {
@@ -337,8 +287,10 @@ export function useInventoryData() {
 
       setProductForm(emptyProductForm)
       await loadData()
+      return true
     } catch (error) {
       setStatus(errorMessage(error, 'No se pudo guardar el producto'))
+      return false
     }
   }
 
@@ -412,14 +364,16 @@ export function useInventoryData() {
     const itemsForSale = saleCart.length
       ? saleCart
       : saleForm.producto_id
-        ? [{
-            producto_id: Number(saleForm.producto_id),
-            cantidad: Number(saleForm.cantidad || 0),
-            precio_unitario: Number(saleForm.precio_unitario || 0),
-            nombre: productosActivos.find(
-              (item) => String(item.id) === String(saleForm.producto_id)
-            )?.nombre || 'Producto'
-          }]
+        ? [
+            {
+              producto_id: Number(saleForm.producto_id),
+              cantidad: Number(saleForm.cantidad || 0),
+              precio_unitario: Number(saleForm.precio_unitario || 0),
+              nombre:
+                productosActivos.find((item) => String(item.id) === String(saleForm.producto_id))
+                  ?.nombre || 'Producto'
+            }
+          ]
         : []
 
     if (!itemsForSale.length) {
@@ -562,7 +516,12 @@ export function useInventoryData() {
           }
         ]
 
-    if (!items.length || !items[0]?.producto_id || !items[0]?.cantidad || !items[0]?.costo_unitario) {
+    if (
+      !items.length ||
+      !items[0]?.producto_id ||
+      !items[0]?.cantidad ||
+      !items[0]?.costo_unitario
+    ) {
       setStatus('Completa producto, cantidad y costo del lote')
       return
     }
@@ -625,16 +584,18 @@ export function useInventoryData() {
       const nota = adjustmentForm.nota || 'Ajuste manual'
       const cantidad = Number(adjustmentForm.cantidad || 0)
 
-      setRecentAdjustments((current) => [
-        {
-          id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-          producto: currentProduct?.nombre || 'Producto',
-          cantidad,
-          nota,
-          fecha: today()
-        },
-        ...current
-      ].slice(0, 6))
+      setRecentAdjustments((current) =>
+        [
+          {
+            id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+            producto: currentProduct?.nombre || 'Producto',
+            cantidad,
+            nota,
+            fecha: today()
+          },
+          ...current
+        ].slice(0, 6)
+      )
 
       setStatus('Ajuste de inventario aplicado')
       setAdjustmentForm(emptyAdjustmentForm)
@@ -707,6 +668,7 @@ export function useInventoryData() {
     handleResetBranding,
     handleCreateCategory,
     handleEditProduct,
+    handleProductImageUpload,
     handleToggleProduct,
     handleDeleteProduct,
     handleDeleteCategory,

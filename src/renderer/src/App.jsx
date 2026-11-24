@@ -86,6 +86,7 @@ function App() {
     handleResetBranding,
     handleCreateCategory,
     handleEditProduct,
+    handleProductImageUpload,
     handleToggleProduct,
     handleDeleteProduct,
     handleDeleteCategory,
@@ -238,6 +239,7 @@ function App() {
               setPendingDelete={setPendingDelete}
               handleDeleteCategory={handleDeleteCategory}
               handleEditProduct={handleEditProduct}
+              handleProductImageUpload={handleProductImageUpload}
               handleToggleProduct={handleToggleProduct}
               handleDeleteProduct={handleDeleteProduct}
               productForm={productForm}

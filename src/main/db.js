@@ -15,6 +15,12 @@ export function initDb() {
   db.exec('PRAGMA foreign_keys = ON')
   db.exec(schema)
 
+  const columns = db.prepare('PRAGMA table_info(productos)').all()
+  const hasImageColumn = columns.some((column) => column.name === 'imagen')
+  if (!hasImageColumn) {
+    db.exec('ALTER TABLE productos ADD COLUMN imagen TEXT')
+  }
+
   const rows = db.prepare('SELECT id, sku FROM productos WHERE sku IS NOT NULL ORDER BY id').all()
   const seen = new Set()
 

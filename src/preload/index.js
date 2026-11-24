@@ -1,6 +1,9 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
-const invoke = (canal) => (...args) => ipcRenderer.invoke(canal, ...args)
+const invoke =
+  (canal) =>
+  (...args) =>
+    ipcRenderer.invoke(canal, ...args)
 
 contextBridge.exposeInMainWorld('electron', {
   process: { versions: process.versions },
@@ -19,6 +22,7 @@ contextBridge.exposeInMainWorld('api', {
   },
   productos: {
     listar: invoke('productos:listar'),
+    guardarImagen: invoke('productos:guardarImagen'),
     crear: invoke('productos:crear'),
     actualizar: invoke('productos:actualizar'),
     toggle: invoke('productos:toggle'),

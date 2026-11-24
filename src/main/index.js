@@ -3,6 +3,7 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { initDb } from './db.js'
+import { getProductImagesDirectory } from './productImageStorage.js'
 import { registerIpc } from './ipc.js'
 
 // Evita abrir dos copias de la app al mismo tiempo (dos procesos sobre la misma BD => "database is locked")
@@ -19,7 +20,7 @@ function createWindow() {
     autoHideMenuBar: true,
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
+      preload: join(__dirname, '../preload/index.mjs'),
       sandbox: false
     }
   })
@@ -57,6 +58,7 @@ app.whenReady().then(() => {
   })
 
   initDb()
+  getProductImagesDirectory()
   registerIpc()
 
   // IPC test

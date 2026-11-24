@@ -82,6 +82,8 @@ export function updateProduct(db, payload = {}) {
   const costo = Number(payload.costo ?? current.costo ?? 0)
   const precio = Number(payload.precio ?? current.precio ?? 0)
   const stockMinimo = Number(payload.stock_minimo ?? current.stock_minimo ?? 0)
+  const imagen =
+    payload.imagen === undefined || payload.imagen === null ? current.imagen : payload.imagen
 
   try {
     db.prepare(
@@ -92,10 +94,11 @@ export function updateProduct(db, payload = {}) {
              categoria_id = ?,
              costo = ?,
              precio = ?,
-             stock_minimo = ?
+             stock_minimo = ?,
+             imagen = ?
        WHERE id = ?
     `
-    ).run(sku, nombre, categoriaId, costo, precio, stockMinimo, productId)
+    ).run(sku, nombre, categoriaId, costo, precio, stockMinimo, imagen, productId)
   } catch (error) {
     if (String(error?.message || '').includes('UNIQUE constraint failed: productos.sku')) {
       throw new Error('Ya existe un producto con ese SKU', { cause: error })

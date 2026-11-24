@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import PropTypes from 'prop-types'
 import Panel from '../components/Panel'
 import { formatMoney, normalizeInputValue } from '../utils/format'
@@ -21,6 +22,7 @@ export default function ProductosPage({
   setPendingDelete,
   handleDeleteCategory,
   handleEditProduct,
+  handleProductImageUpload,
   handleToggleProduct,
   handleDeleteProduct,
   productForm,
@@ -30,6 +32,165 @@ export default function ProductosPage({
   formatMoneyInput,
   parseMoneyInput
 }) {
+  const [isProductModalOpen, setIsProductModalOpen] = useState(false)
+
+  const getImageSource = (imagePath) => {
+    if (!imagePath) return ''
+
+    const value = String(imagePath).trim()
+    if (!value) return ''
+
+    if (
+      value.startsWith('data:') ||
+      value.startsWith('http://') ||
+      value.startsWith('https://') ||
+      value.startsWith('file://') ||
+      value.startsWith('blob:')
+    ) {
+      return value
+    }
+
+    const normalizedPath = value.replace(/\\/g, '/')
+    const encodedPath = encodeURI(normalizedPath).replace(/#/g, '%23')
+
+    if (/^[A-Za-z]:\//.test(normalizedPath)) {
+      return `file:///${encodedPath}`
+    }
+
+    return `file://${encodedPath.startsWith('/') ? encodedPath : `/${encodedPath}`}`
+  }
+
+  const openCreateProductModal = () => {
+    setProductForm(emptyProductForm)
+    setIsProductModalOpen(true)
+  }
+
+  const openEditProductModal = (producto) => {
+    handleEditProduct(producto)
+    setIsProductModalOpen(true)
+  }
+
+  const closeProductModal = () => {
+    setProductForm(emptyProductForm)
+    setIsProductModalOpen(false)
+  }
+
+  const handleProductModalSubmit = async (event) => {
+    const submitted = await handleProductSubmit(event)
+    if (submitted) {
+      closeProductModal()
+    }
+  }
+
+  const renderProductForm = () => (
+    <>
+      <div className="product-image-upload-box">
+        <label className="product-image-picker">
+          {productForm.imagen ? (
+            <img src={getImageSource(productForm.imagen)} alt="Preview del producto" />
+          ) : (
+            <span>Agregar foto</span>
+          )}
+          <input type="file" accept="image/*" onChange={handleProductImageUpload} />
+        </label>
+      </div>
+
+      <label>
+        Nombre
+        <input
+          value={normalizeInputValue(productForm.nombre)}
+          onChange={(event) =>
+            setProductForm((current) => ({ ...current, nombre: event.target.value }))
+          }
+          placeholder="Nombre"
+        />
+      </label>
+
+      <div className="field-row two-col">
+        <label>
+          Costo del lote
+          <input
+            type="text"
+            inputMode="numeric"
+            value={formatMoneyInput(productForm.costo)}
+            onChange={(event) =>
+              setProductForm((current) => ({
+                ...current,
+                costo: parseMoneyInput(event.target.value)
+              }))
+            }
+          />
+        </label>
+        <label>
+          Precio sugerido
+          <input
+            type="text"
+            inputMode="numeric"
+            value={formatMoneyInput(productForm.precio)}
+            onChange={(event) =>
+              setProductForm((current) => ({
+                ...current,
+                precio: parseMoneyInput(event.target.value)
+              }))
+            }
+          />
+        </label>
+      </div>
+
+      {!productForm.id && (
+        <div className="field-row two-col">
+          <label>
+            Stock mínimo
+            <input
+              type="number"
+              min="0"
+              value={normalizeInputValue(productForm.stock_minimo)}
+              onChange={(event) =>
+                setProductForm((current) => ({
+                  ...current,
+                  stock_minimo: event.target.value
+                }))
+              }
+            />
+          </label>
+          <label>
+            Stock inicial
+            <input
+              type="number"
+              min="0"
+              value={normalizeInputValue(productForm.stock_inicial)}
+              onChange={(event) =>
+                setProductForm((current) => ({
+                  ...current,
+                  stock_inicial: event.target.value
+                }))
+              }
+              placeholder="0"
+            />
+          </label>
+        </div>
+      )}
+
+      {productForm.id && (
+        <small className="muted">
+          El stock real se actualiza con compras, ventas y ajustes de inventario, no desde la
+          edición del producto.
+        </small>
+      )}
+
+      <div className="inline-actions modal-actions">
+        <button type="submit" className="primary-btn">
+          {productForm.id ? 'Actualizar producto' : 'Guardar producto'}
+        </button>
+        {productForm.id ? (
+          <button type="button" className="secondary-btn" onClick={closeProductModal}>
+            Cancelar
+          </button>
+        ) : null}
+      </div>
+    </>
+  )
+
   return (
     <Panel>
       <div className="panel-header products-header">
@@ -73,7 +234,10 @@ export default function ProductosPage({
             </label>
             <label className="toolbar-sort">
               Ordenar por
-              <select value={productSortBy} onChange={(event) => setProductSortBy(event.target.value)}>
+              <select
+                value={productSortBy}
+                onChange={(event) => setProductSortBy(event.target.value)}
+              >
                 <option value="nombre">Nombre</option>
                 <option value="precio">Precio</option>
                 <option value="stock">Stock</option>
@@ -86,6 +250,13 @@ export default function ProductosPage({
               onClick={() => setShowInactiveProducts((actual) => !actual)}
             >
               {showInactiveProducts ? 'Ocultar inactivos' : 'Ver inactivos'}
+            </button>
+            <button
+              type="button"
+              className="primary-btn add-product-btn"
+              onClick={openCreateProductModal}
+            >
+              + Agregar producto
             </button>
           </div>
 
@@ -136,11 +307,20 @@ export default function ProductosPage({
                     productosPorCategoria.map((producto) => (
                       <tr key={producto.id}>
                         <td>
-                          <div>
-                            {producto.nombre}
-                            {Number(producto.activo) !== 1 ? (
-                              <span className="badge">Inactivo</span>
+                          <div className="product-name-cell">
+                            {producto.imagen ? (
+                              <img
+                                src={getImageSource(producto.imagen)}
+                                alt={producto.nombre}
+                                className="mini-product-image"
+                              />
                             ) : null}
+                            <div>
+                              {producto.nombre}
+                              {Number(producto.activo) !== 1 ? (
+                                <span className="badge">Inactivo</span>
+                              ) : null}
+                            </div>
                           </div>
                         </td>
                         <td>{producto.stock}</td>
@@ -151,7 +331,7 @@ export default function ProductosPage({
                             <button
                               type="button"
                               className="secondary-btn small-btn"
-                              onClick={() => handleEditProduct(producto)}
+                              onClick={() => openEditProductModal(producto)}
                             >
                               Editar
                             </button>
@@ -208,106 +388,29 @@ export default function ProductosPage({
               </table>
             </div>
 
-            <form className="stack-form side-form" onSubmit={handleProductSubmit}>
-              <h3>{productForm.id ? 'Editar producto' : 'Agregar producto'}</h3>
-              <label>
-                Nombre
-                <input
-                  value={normalizeInputValue(productForm.nombre)}
-                  onChange={(event) =>
-                    setProductForm((current) => ({ ...current, nombre: event.target.value }))
-                  }
-                  placeholder="Nombre"
-                />
-              </label>
-
-              <div className="field-row two-col">
-                <label>
-                  Costo del lote
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    value={formatMoneyInput(productForm.costo)}
-                    onChange={(event) =>
-                      setProductForm((current) => ({
-                        ...current,
-                        costo: parseMoneyInput(event.target.value)
-                      }))
-                    }
-                  />
-                </label>
-                <label>
-                  Precio sugerido
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    value={formatMoneyInput(productForm.precio)}
-                    onChange={(event) =>
-                      setProductForm((current) => ({
-                        ...current,
-                        precio: parseMoneyInput(event.target.value)
-                      }))
-                    }
-                  />
-                </label>
-              </div>
-
-              {!productForm.id && (
-                <div className="field-row two-col">
-                  <label>
-                    Stock mínimo
-                    <input
-                      type="number"
-                      min="0"
-                      value={normalizeInputValue(productForm.stock_minimo)}
-                      onChange={(event) =>
-                        setProductForm((current) => ({
-                          ...current,
-                          stock_minimo: event.target.value
-                        }))
-                      }
-                    />
-                  </label>
-                  <label>
-                    Stock inicial
-                    <input
-                      type="number"
-                      min="0"
-                      value={normalizeInputValue(productForm.stock_inicial)}
-                      onChange={(event) =>
-                        setProductForm((current) => ({
-                          ...current,
-                          stock_inicial: event.target.value
-                        }))
-                      }
-                      placeholder="0"
-                    />
-                  </label>
+            {isProductModalOpen && (
+              <div className="modal-overlay" onClick={closeProductModal}>
+                <div
+                  className="modal-card product-modal-card"
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  <div className="modal-header">
+                    <h3>{productForm.id ? 'Editar producto' : 'Agregar producto'}</h3>
+                    <button
+                      type="button"
+                      className="modal-close"
+                      onClick={closeProductModal}
+                      aria-label="Cerrar"
+                    >
+                      ×
+                    </button>
+                  </div>
+                  <form className="stack-form" onSubmit={handleProductModalSubmit}>
+                    {renderProductForm()}
+                  </form>
                 </div>
-              )}
-
-              {productForm.id && (
-                <small className="muted">
-                  El stock real se actualiza con compras, ventas y ajustes de inventario, no
-                  desde la edición del producto.
-                </small>
-              )}
-
-              <div className="inline-actions">
-                <button type="submit" className="primary-btn">
-                  {productForm.id ? 'Actualizar producto' : 'Guardar producto'}
-                </button>
-                {productForm.id ? (
-                  <button
-                    type="button"
-                    className="secondary-btn"
-                    onClick={() => setProductForm(emptyProductForm)}
-                  >
-                    Cancelar
-                  </button>
-                ) : null}
               </div>
-            </form>
+            )}
           </div>
         </>
       ) : (
@@ -353,6 +456,7 @@ ProductosPage.propTypes = {
   setPendingDelete: PropTypes.func.isRequired,
   handleDeleteCategory: PropTypes.func.isRequired,
   handleEditProduct: PropTypes.func.isRequired,
+  handleProductImageUpload: PropTypes.func.isRequired,
   handleToggleProduct: PropTypes.func.isRequired,
   handleDeleteProduct: PropTypes.func.isRequired,
   productForm: PropTypes.shape({
@@ -361,7 +465,8 @@ ProductosPage.propTypes = {
     costo: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
     precio: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
     stock_minimo: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
-    stock_inicial: PropTypes.oneOfType([PropTypes.number, PropTypes.string])
+    stock_inicial: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+    imagen: PropTypes.string
   }).isRequired,
   setProductForm: PropTypes.func.isRequired,
   emptyProductForm: PropTypes.shape({
@@ -369,7 +474,8 @@ ProductosPage.propTypes = {
     costo: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
     precio: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
     stock_minimo: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
-    stock_inicial: PropTypes.oneOfType([PropTypes.number, PropTypes.string])
+    stock_inicial: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+    imagen: PropTypes.string
   }).isRequired,
   handleProductSubmit: PropTypes.func.isRequired,
   formatMoneyInput: PropTypes.func.isRequired,

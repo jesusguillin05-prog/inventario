@@ -2,12 +2,14 @@ import PropTypes from 'prop-types'
 import Panel from '../components/Panel'
 import { formatMoney, formatNumber } from '../utils/format'
 
-export default function ReportesPage({ report }) {
+export default function ReportesPage({ report, periodType = 'month' }) {
+  const isDaily = periodType === 'day'
+
   return (
     <section className="grid-2 report-layout">
       <Panel>
         <div className="panel-header">
-          <h2>Balance del mes</h2>
+          <h2>{isDaily ? 'Balance del día' : 'Balance del mes'}</h2>
         </div>
 
         <div className="mini-stats">
@@ -28,7 +30,7 @@ export default function ReportesPage({ report }) {
             <strong>{formatMoney(report.utilidadNeta)}</strong>
           </div>
           <div>
-            <span>Compras del mes</span>
+            <span>{isDaily ? 'Compras del día' : 'Compras del mes'}</span>
             <strong>{formatMoney(report.comprasDelMes)}</strong>
           </div>
           <div>
@@ -54,7 +56,7 @@ export default function ReportesPage({ report }) {
               </li>
             ))
           ) : (
-            <li className="empty-row">Sin ventas este mes</li>
+            <li className="empty-row">Sin ventas este {isDaily ? 'día' : 'mes'}</li>
           )}
         </ul>
       </Panel>
@@ -76,5 +78,6 @@ ReportesPage.propTypes = {
         unidades: PropTypes.number
       })
     )
-  }).isRequired
+  }).isRequired,
+  periodType: PropTypes.oneOf(['month', 'day'])
 }

@@ -9,7 +9,7 @@ import GastosPage from './pages/GastosPage'
 import ProductosPage from './pages/ProductosPage'
 import ReportesPage from './pages/ReportesPage'
 import VentasPage from './pages/VentasPage'
-import { monthLabel, thisMonth, looksLikeError } from './utils/format'
+import { monthLabel, thisMonth, today, looksLikeError } from './utils/format'
 
 const PAGE_TITLES = {
   dashboard: { title: 'Resumen', subtitle: 'Cómo va tu negocio' },
@@ -55,6 +55,10 @@ function App() {
     setShowInactiveProducts,
     reportMonth,
     setReportMonth,
+    reportDate,
+    setReportDate,
+    reportPeriodType,
+    setReportPeriodType,
     productForm,
     setProductForm,
     saleForm,
@@ -111,9 +115,13 @@ function App() {
 
   const page = PAGE_TITLES[tab] || PAGE_TITLES.dashboard
   const pageSubtitle =
-    tab === 'dashboard' || tab === 'reportes'
+    tab === 'dashboard'
       ? `${page.subtitle} · ${monthLabel(reportMonth)}`
-      : page.subtitle
+      : tab === 'reportes'
+        ? reportPeriodType === 'day'
+          ? `${page.subtitle} · ${reportDate}`
+          : `${page.subtitle} · ${monthLabel(reportMonth)}`
+        : page.subtitle
   const [notificationsOpen, setNotificationsOpen] = useState(false)
 
   return (
@@ -185,13 +193,34 @@ function App() {
             {tab === 'reportes' && (
               <div className="header-actions">
                 <label>
-                  Mes
-                  <input
-                    type="month"
-                    value={reportMonth}
-                    onChange={(event) => setReportMonth(event.target.value || thisMonth())}
-                  />
+                  Periodo
+                  <select
+                    value={reportPeriodType}
+                    onChange={(event) => setReportPeriodType(event.target.value)}
+                  >
+                    <option value="month">Mes</option>
+                    <option value="day">Día</option>
+                  </select>
                 </label>
+                {reportPeriodType === 'day' ? (
+                  <label>
+                    Día
+                    <input
+                      type="date"
+                      value={reportDate}
+                      onChange={(event) => setReportDate(event.target.value || today())}
+                    />
+                  </label>
+                ) : (
+                  <label>
+                    Mes
+                    <input
+                      type="month"
+                      value={reportMonth}
+                      onChange={(event) => setReportMonth(event.target.value || thisMonth())}
+                    />
+                  </label>
+                )}
                 <label>
                   Categoría
                   <select
@@ -274,6 +303,7 @@ function App() {
             <ComprasPage
               productos={productos}
               productosActivos={productosActivos}
+              categorias={categorias}
               purchaseForm={purchaseForm}
               setPurchaseForm={setPurchaseForm}
               addToPurchaseCart={addToPurchaseCart}
@@ -297,7 +327,7 @@ function App() {
             />
           )}
 
-          {tab === 'reportes' && <ReportesPage report={report} />}
+          {tab === 'reportes' && <ReportesPage report={report} periodType={reportPeriodType} />}
 
           {tab === 'configuracion' && (
             <ConfiguracionPage

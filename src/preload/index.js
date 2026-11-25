@@ -39,5 +39,8 @@ contextBridge.exposeInMainWorld('api', {
   },
   inventario: { ajustar: invoke('inventario:ajustar') },
   gastos: { crear: invoke('gastos:crear'), listar: invoke('gastos:listar') },
-  reportes: { mensual: invoke('reportes:mensual') }
+  reportes: {
+    mensual: invoke('reportes:mensual'),
+    diario: invoke('reportes:diario')
+  }
 })

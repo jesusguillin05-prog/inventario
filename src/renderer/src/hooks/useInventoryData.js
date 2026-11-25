@@ -66,6 +66,8 @@ export function useInventoryData() {
   const [ventasCategoryId, setVentasCategoryId] = useState('')
   const [report, setReport] = useState(defaultReport)
   const [reportCategoryId, setReportCategoryId] = useState('')
+  const [reportPeriodType, setReportPeriodType] = useState('month')
+  const [reportDate, setReportDate] = useState(today())
   const [status, setStatus] = useState('')
   const [categoryName, setCategoryName] = useState('')
   const [selectedCategoryId, setSelectedCategoryId] = useState('')
@@ -111,7 +113,10 @@ export function useInventoryData() {
           window.api.categorias.listar(),
           window.api.productos.listar({ includeInactive: true }),
           window.api.ventas.listar(ventasCategoryId || null),
-          window.api.reportes.mensual(reportMonth, reportCategoryId || null),
+          window.api.reportes[reportPeriodType === 'day' ? 'diario' : 'mensual'](
+            reportPeriodType === 'day' ? reportDate : reportMonth,
+            reportCategoryId || null
+          ),
           window.api.gastos.listar(reportMonth)
         ])
 
@@ -123,7 +128,7 @@ export function useInventoryData() {
     } catch (error) {
       setStatus(errorMessage(error, 'Error al cargar los datos'))
     }
-  }, [reportCategoryId, reportMonth, ventasCategoryId])
+  }, [reportCategoryId, reportMonth, reportDate, reportPeriodType, ventasCategoryId])
 
   useEffect(() => {
     if (!status) return undefined
@@ -620,6 +625,10 @@ export function useInventoryData() {
     setReport,
     reportCategoryId,
     setReportCategoryId,
+    reportPeriodType,
+    setReportPeriodType,
+    reportDate,
+    setReportDate,
     status,
     setStatus,
     categoryName,

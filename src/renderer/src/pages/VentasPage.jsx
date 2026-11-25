@@ -19,7 +19,11 @@ export default function VentasPage({
   ventasCategoryId
 }) {
   const [productSearchText, setProductSearchText] = useState('')
-  const selectedProduct = productosActivos.find(
+  const [saleCategoryId, setSaleCategoryId] = useState('')
+  const productosVenta = productosActivos.filter(
+    (producto) => !saleCategoryId || String(producto.categoria_id) === String(saleCategoryId)
+  )
+  const selectedProduct = productosVenta.find(
     (producto) => String(producto.id) === String(saleForm.producto_id)
   )
   const productInputValue = selectedProduct ? selectedProduct.nombre : productSearchText
@@ -39,6 +43,29 @@ export default function VentasPage({
           }}
         >
           <label>
+            Categoría
+            <select
+              value={saleCategoryId}
+              onChange={(event) => {
+                setSaleCategoryId(event.target.value)
+                setProductSearchText('')
+                setSaleForm((current) => ({
+                  ...current,
+                  producto_id: '',
+                  precio_unitario: ''
+                }))
+              }}
+            >
+              <option value="">Todas las categorías</option>
+              {categorias.map((categoria) => (
+                <option key={categoria.id} value={String(categoria.id)}>
+                  {categoria.nombre}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label>
             Producto
             <input
               list="productos-venta"
@@ -47,7 +74,7 @@ export default function VentasPage({
                 const nombre = event.target.value
                 setProductSearchText(nombre)
 
-                const producto = productosActivos.find(
+                const producto = productosVenta.find(
                   (item) => item.nombre.toLowerCase() === nombre.trim().toLowerCase()
                 )
 
@@ -60,13 +87,17 @@ export default function VentasPage({
               placeholder="Escribe el nombre del producto"
             />
             <datalist id="productos-venta">
-              {productosActivos.map((producto) => (
+              {productosVenta.map((producto) => (
                 <option key={producto.id} value={producto.nombre}>
                   {producto.nombre} (stock: {producto.stock})
                 </option>
               ))}
             </datalist>
           </label>
+
+          {productosVenta.length === 0 && (
+            <div className="empty-note">No hay productos activos en esta categoría.</div>
+          )}
 
           <div className="field-row two-col">
             <label>
@@ -233,6 +264,8 @@ VentasPage.propTypes = {
     PropTypes.shape({
       id: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
       nombre: PropTypes.string,
+      precio: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+      categoria_id: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
       stock: PropTypes.oneOfType([PropTypes.number, PropTypes.string])
     })
   ).isRequired,

@@ -5,6 +5,7 @@ import { formatMoney, normalizeInputValue } from '../utils/format'
 
 export default function ComprasPage({
   productosActivos,
+  categorias,
   purchaseForm,
   setPurchaseForm,
   addToPurchaseCart,
@@ -18,7 +19,20 @@ export default function ComprasPage({
   recentAdjustments
 }) {
   const [productSearchText, setProductSearchText] = useState('')
-  const selectedProduct = productosActivos.find(
+  const [purchaseCategoryId, setPurchaseCategoryId] = useState('')
+  const [adjustmentCategoryId, setAdjustmentCategoryId] = useState('')
+  const [adjustmentSearchText, setAdjustmentSearchText] = useState('')
+
+  const productosCompra = productosActivos.filter(
+    (producto) =>
+      !purchaseCategoryId || String(producto.categoria_id) === String(purchaseCategoryId)
+  )
+  const productosAjuste = productosActivos.filter(
+    (producto) =>
+      !adjustmentCategoryId || String(producto.categoria_id) === String(adjustmentCategoryId)
+  )
+
+  const selectedProduct = productosCompra.find(
     (producto) => String(producto.id) === String(purchaseForm.producto_id)
   )
   const productInputValue = selectedProduct ? selectedProduct.nombre : productSearchText
@@ -38,6 +52,29 @@ export default function ComprasPage({
           }}
         >
           <label>
+            Categoría
+            <select
+              value={purchaseCategoryId}
+              onChange={(event) => {
+                setPurchaseCategoryId(event.target.value)
+                setProductSearchText('')
+                setPurchaseForm((current) => ({
+                  ...current,
+                  producto_id: '',
+                  costo_unitario: ''
+                }))
+              }}
+            >
+              <option value="">Todas las categorías</option>
+              {categorias.map((categoria) => (
+                <option key={categoria.id} value={String(categoria.id)}>
+                  {categoria.nombre}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label>
             Producto
             <input
               list="productos-compra"
@@ -46,7 +83,7 @@ export default function ComprasPage({
                 const nombre = event.target.value
                 setProductSearchText(nombre)
 
-                const producto = productosActivos.find(
+                const producto = productosCompra.find(
                   (item) => item.nombre.toLowerCase() === nombre.trim().toLowerCase()
                 )
 
@@ -59,13 +96,17 @@ export default function ComprasPage({
               placeholder="Escribe el nombre del producto"
             />
             <datalist id="productos-compra">
-              {productosActivos.map((producto) => (
+              {productosCompra.map((producto) => (
                 <option key={producto.id} value={producto.nombre}>
                   {producto.nombre} (stock: {producto.stock})
                 </option>
               ))}
             </datalist>
           </label>
+
+          {productosCompra.length === 0 && (
+            <div className="empty-note">No hay productos activos en esta categoría.</div>
+          )}
 
           <div className="field-row two-col">
             <label>
@@ -166,17 +207,40 @@ export default function ComprasPage({
 
         <form onSubmit={handleAdjustmentSubmit} className="stack-form">
           <label>
+            Categoría
+            <select
+              value={adjustmentCategoryId}
+              onChange={(event) => {
+                setAdjustmentCategoryId(event.target.value)
+                setAdjustmentSearchText('')
+                setAdjustmentForm((current) => ({
+                  ...current,
+                  producto_id: ''
+                }))
+              }}
+            >
+              <option value="">Todas las categorías</option>
+              {categorias.map((categoria) => (
+                <option key={categoria.id} value={String(categoria.id)}>
+                  {categoria.nombre}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label>
             Producto
             <input
               list="productos-ajuste"
               value={
-                productosActivos.find(
+                productosAjuste.find(
                   (producto) => String(producto.id) === String(adjustmentForm.producto_id)
-                )?.nombre ?? ''
+                )?.nombre ?? adjustmentSearchText
               }
               onChange={(event) => {
                 const nombre = event.target.value
-                const producto = productosActivos.find(
+                setAdjustmentSearchText(nombre)
+                const producto = productosAjuste.find(
                   (item) => item.nombre.toLowerCase() === nombre.trim().toLowerCase()
                 )
 
@@ -188,13 +252,17 @@ export default function ComprasPage({
               placeholder="Escribe el nombre del producto"
             />
             <datalist id="productos-ajuste">
-              {productosActivos.map((producto) => (
+              {productosAjuste.map((producto) => (
                 <option key={producto.id} value={producto.nombre}>
                   {producto.nombre} (stock: {producto.stock})
                 </option>
               ))}
             </datalist>
           </label>
+
+          {productosAjuste.length === 0 && (
+            <div className="empty-note">No hay productos activos en esta categoría.</div>
+          )}
 
           <div className="field-row two-col">
             <label>
@@ -266,6 +334,8 @@ ComprasPage.propTypes = {
     PropTypes.shape({
       id: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
       nombre: PropTypes.string,
+      costo: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+      categoria_id: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
       stock: PropTypes.oneOfType([PropTypes.number, PropTypes.string])
     })
   ).isRequired,
@@ -302,6 +372,12 @@ ComprasPage.propTypes = {
       cantidad: PropTypes.number,
       nota: PropTypes.string,
       fecha: PropTypes.string
+    })
+  ).isRequired,
+  categorias: PropTypes.arrayOf(
+    PropTypes.shape({
+      id: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
+      nombre: PropTypes.string
     })
   ).isRequired
 }

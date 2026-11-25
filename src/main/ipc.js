@@ -1,7 +1,7 @@
 import { ipcMain } from 'electron'
 import { getDb, transaction } from './db.js'
 import { getProductList, normalizeSku, toggleProduct, updateProduct } from './inventoryQueries.js'
-import { getMonthlyReport } from './reportQueries.js'
+import { getMonthlyReport, getDailyReport } from './reportQueries.js'
 import { reconcilePurchaseTotal } from './purchaseUtils.js'
 import { reconcileSaleTotal } from './saleUtils.js'
 import { saveProductImage } from './productImageStorage.js'
@@ -438,5 +438,8 @@ export function registerIpc() {
   // ---------- Reporte mensual (mes = 'YYYY-MM') ----------
   ipcMain.handle('reportes:mensual', (_e, mes, categoriaId = null) =>
     getMonthlyReport(db, mes, categoriaId)
+  )
+  ipcMain.handle('reportes:diario', (_e, dia, categoriaId = null) =>
+    getDailyReport(db, dia, categoriaId)
   )
 }

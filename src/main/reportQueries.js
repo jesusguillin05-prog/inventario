@@ -1,9 +1,11 @@
-export function getMonthlyReport(db, mes, categoriaId = null) {
+export function getReport(db, periodo, categoriaId = null, tipo = 'mes') {
   const hasCategory = categoriaId !== null && categoriaId !== undefined && categoriaId !== ''
+  const fechaWhere = tipo === 'dia' ? 'v.fecha = ?' : 'substr(v.fecha, 1, 7) = ?'
+  const compraFechaWhere = tipo === 'dia' ? 'c.fecha = ?' : 'substr(c.fecha, 1, 7) = ?'
 
-  const ventasParams = hasCategory ? [mes, Number(categoriaId)] : [mes]
-  const comprasParams = hasCategory ? [mes, Number(categoriaId)] : [mes]
-  const rankingParams = hasCategory ? [mes, Number(categoriaId)] : [mes]
+  const ventasParams = hasCategory ? [periodo, Number(categoriaId)] : [periodo]
+  const comprasParams = hasCategory ? [periodo, Number(categoriaId)] : [periodo]
+  const rankingParams = hasCategory ? [periodo, Number(categoriaId)] : [periodo]
   const inventarioParams = hasCategory ? [Number(categoriaId)] : []
 
   const ingresos = db
@@ -13,7 +15,7 @@ export function getMonthlyReport(db, mes, categoriaId = null) {
     FROM venta_items vi
     JOIN ventas v ON v.id = vi.venta_id
     JOIN productos p ON p.id = vi.producto_id
-    WHERE substr(v.fecha, 1, 7) = ?
+    WHERE ${fechaWhere}
       ${hasCategory ? 'AND p.categoria_id = ?' : ''}
   `
     )
@@ -26,15 +28,18 @@ export function getMonthlyReport(db, mes, categoriaId = null) {
     FROM venta_items vi
     JOIN ventas v ON v.id = vi.venta_id
     JOIN productos p ON p.id = vi.producto_id
-    WHERE substr(v.fecha, 1, 7) = ?
+    WHERE ${fechaWhere}
       ${hasCategory ? 'AND p.categoria_id = ?' : ''}
   `
     )
     .get(...ventasParams).v
 
-  const gastos = db
-    .prepare('SELECT COALESCE(SUM(monto), 0) AS v FROM gastos WHERE substr(fecha, 1, 7) = ?')
-    .get(mes).v
+  const gastos =
+    tipo === 'dia'
+      ? db.prepare('SELECT COALESCE(SUM(monto), 0) AS v FROM gastos WHERE fecha = ?').get(periodo).v
+      : db
+          .prepare('SELECT COALESCE(SUM(monto), 0) AS v FROM gastos WHERE substr(fecha, 1, 7) = ?')
+          .get(periodo).v
 
   const compras = db
     .prepare(
@@ -43,7 +48,7 @@ export function getMonthlyReport(db, mes, categoriaId = null) {
     FROM compras c
     JOIN compra_items ci ON ci.compra_id = c.id
     JOIN productos p ON p.id = ci.producto_id
-    WHERE substr(c.fecha, 1, 7) = ?
+    WHERE ${compraFechaWhere}
       ${hasCategory ? 'AND p.categoria_id = ?' : ''}
   `
     )
@@ -57,7 +62,7 @@ export function getMonthlyReport(db, mes, categoriaId = null) {
     FROM venta_items vi
     JOIN ventas v ON v.id = vi.venta_id
     JOIN productos p ON p.id = vi.producto_id
-    WHERE substr(v.fecha, 1, 7) = ?
+    WHERE ${fechaWhere}
       ${hasCategory ? 'AND p.categoria_id = ?' : ''}
     GROUP BY p.id
     ORDER BY unidades DESC, p.nombre ASC
@@ -80,7 +85,7 @@ export function getMonthlyReport(db, mes, categoriaId = null) {
   const utilidadBruta = ingresos - costoVendido
 
   return {
-    mes,
+    mes: periodo,
     ingresos,
     costoVendido,
     utilidadBruta,
@@ -90,4 +95,12 @@ export function getMonthlyReport(db, mes, categoriaId = null) {
     valorInventario,
     masVendidos
   }
+}
+
+export function getMonthlyReport(db, mes, categoriaId = null) {
+  return getReport(db, mes, categoriaId, 'mes')
+}
+
+export function getDailyReport(db, dia, categoriaId = null) {
+  return getReport(db, dia, categoriaId, 'dia')
 }
